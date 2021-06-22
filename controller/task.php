@@ -87,7 +87,8 @@ if (array_key_exists("taskid", $_GET)) {
             exit();
         }
 
-    } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    }
+    elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         try {
             $deleteQuery = 'DELETE FROM table_tasks WHERE id = :taskId';
             $prepareStatement = $writeDb->prepare($deleteQuery);
@@ -122,7 +123,172 @@ if (array_key_exists("taskid", $_GET)) {
         }
 
 
-    } elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
+    }
+    elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
+
+        try {
+
+            if ($_SERVER['CONTENT_TYPE'] !== 'application/json') {
+                $response = new Response();
+                $response->setHttpStatusCode(400);
+                $response->setSuccess(false);
+                $response->setMessages("CONTENT TYPE should be json");
+                $response->send();
+                exit();
+            }
+
+            $rawFATCHData = file_get_contents('php://input');
+
+            if (!$jsonData = json_decode($rawFATCHData)) {
+                $response = new Response();
+                $response->setHttpStatusCode(400);
+                $response->setSuccess(false);
+                $response->setMessages("Request body is not a valid json");
+                $response->send();
+                exit();
+            }
+
+            $titleUpdateFlag = false;
+            $descriptionUpdateFlag = false;
+            $deadlineUpdateFlag = false;
+            $completedUpdateFlag = false;
+
+            $queryFields = '';
+
+            if (isset($jsonData->title)) {
+                $titleUpdateFlag = true;
+                $queryFields .= "title = :title, ";
+            }
+            if (isset($jsonData->description)) {
+                $descriptionUpdateFlag = true;
+                $queryFields .= "description = :description, ";
+            }
+            if (isset($jsonData->deadline)) {
+                $deadlineUpdateFlag = true;
+                $queryFields .= "deadline = STR_TO_DATE(:deadline,'%d/%m/%Y %H:%i'), ";
+            }
+            if (isset($jsonData->completed)) {
+                $completedUpdateFlag = true;
+                $queryFields .= "completed = :completed, ";
+            }
+
+            $queryFields = rtrim($queryFields, ", ");
+
+            if ($titleUpdateFlag === false &&
+                $descriptionUpdateFlag === false &&
+                $deadlineUpdateFlag === false &&
+                $completedUpdateFlag === false) {
+
+                $response = new Response();
+                $response->setHttpStatusCode(400);
+                $response->setSuccess(false);
+                $response->setMessages("All fields are empty");
+                $response->send();
+                exit();
+            }
+
+            $checkTaskQuery = $readDb->prepare('SELECT id,title,description,DATE_FORMAT(deadline,"%d/%m/%Y %H:%i")
+            as deadline,completed FROM table_tasks WHERE id = :taskid');
+            $checkTaskQuery->bindParam(':taskid', $taskId, PDO::PARAM_INT);
+            $checkTaskQuery->execute();
+
+            $rowCount = $checkTaskQuery->rowCount();
+            if ($rowCount === 0) {
+                $response = new Response();
+                $response->setHttpStatusCode(404);
+                $response->setSuccess(false);
+                $response->setMessages("Task not found to update");
+                $response->send();
+                exit();
+            }
+
+            while ($row = $checkTaskQuery->fetch(PDO::FETCH_ASSOC)) {
+                $task = new Task($row['id'], $row['title'], $row['description'], $row['deadline'], $row['completed']);
+            }
+
+            $fetchQuery = $writeDb->prepare("UPDATE table_tasks SET " . $queryFields . " WHERE id = :taskid");
+
+            if ($titleUpdateFlag === true) {
+                $task->setTitle($jsonData->title);
+                $toBeUpTitle = $task->getTitle();
+                $fetchQuery->bindParam(":title", $toBeUpTitle);
+            }
+            if ($descriptionUpdateFlag === true) {
+                $task->setDescription($jsonData->description);
+                $toBeUpDescription = $task->getDescription();
+                $fetchQuery->bindParam(":description", $toBeUpDescription);
+            }
+            if ($deadlineUpdateFlag === true) {
+                $task->setDeadline($jsonData->deadline);
+                $toBeUpDeadline = $task->getDeadline();
+                $fetchQuery->bindParam(":deadline", $toBeUpDeadline);
+            }
+            if ($completedUpdateFlag === true) {
+                $task->setCompleted($jsonData->completed);
+                $toBeUpCompleted = $task->getCompleted();
+                $fetchQuery->bindParam(":completed", $toBeUpCompleted);
+            }
+
+            $fetchQuery->bindParam(':taskid', $taskId, PDO::PARAM_INT);
+            $fetchQuery->execute();
+
+            $rowCount = $fetchQuery->rowCount();
+
+            if ($rowCount === 0) {
+                $response = new Response();
+                $response->setHttpStatusCode(400);
+                $response->setSuccess(false);
+                $response->setMessages("Task not updated");
+                $response->send();
+                exit();
+            }
+
+            $getQuery = $readDb->prepare('SELECT id,title,description,DATE_FORMAT(deadline,"%d/%m/%Y %H:%i")
+            as deadline,completed FROM table_tasks WHERE id = :taskid');
+            $getQuery->bindParam(':taskid', $taskId, PDO::PARAM_INT);
+            $getQuery->execute();
+
+            $rowCount = $getQuery->rowCount();
+            if ($rowCount === 0) {
+                $response = new Response();
+                $response->setHttpStatusCode(404);
+                $response->setSuccess(false);
+                $response->setMessages("Task not found");
+                $response->send();
+                exit();
+            }
+
+            $tasksArray = array();
+            while ($row = $getQuery->fetch(PDO::FETCH_ASSOC)) {
+                $task = new Task($row['id'], $row['title'], $row['description'], $row['deadline'], $row['completed']);
+                $tasksArray[] = $task->getTaskArray();
+            }
+            $returnArray = array();
+            $returnArray['rowCount'] = $rowCount;
+            $returnArray['tasks'] = $tasksArray;
+            $response = new Response();
+            $response->setHttpStatusCode(200);
+            $response->setSuccess(true);
+            $response->setMessages("Updated Task");
+            $response->setData($returnArray);
+            $response->send();
+            exit();
+
+        } catch (TaskException $ex) {
+            $response = new Response();
+            $response->setHttpStatusCode(400);
+            $response->setSuccess(false);
+            $response->setMessages("Failed after task update");
+            $response->send();
+            exit();
+        } catch (PDOException $ex) {
+            $response = new Response();
+            $response->setHttpStatusCode(500);
+            $response->setSuccess(false);
+            $response->setMessages("Database query error");
+            $response->send();
+            exit();
+        }
 
     } else {
         $response = new Response();
@@ -209,7 +375,8 @@ if (array_key_exists("taskid", $_GET)) {
         $response->send();
         exit();
     }
-} elseif (array_key_exists("page", $_GET)) {
+}
+elseif (array_key_exists("page", $_GET)) {
 
     $page = $_GET['page'];
     if ($page == '' || !is_numeric($page)) {
@@ -237,7 +404,6 @@ if (array_key_exists("taskid", $_GET)) {
 
             // calculate pages based on task counts
             $noOfPages = ceil($totalTasks / $tasksLimitPerPage);
-            echo $noOfPages;
 
             if ($noOfPages == 0) {
                 $noOfPages = 1;
@@ -255,9 +421,9 @@ if (array_key_exists("taskid", $_GET)) {
             $offSet = ($page == 1 ? 0 : ($tasksLimitPerPage * ($page - 1)));
 
             $getTaskQuery = $readDb->prepare('SELECT id,title,description,DATE_FORMAT(deadline,"%d/%m/%Y %H:%i")
-            as deadline,completed FROM table_tasks limit :tasksLimitPerPage offset :offset');
+            as deadline,completed FROM table_tasks limit :tasksLimitPerPage offset :ofset');
             $getTaskQuery->bindParam(":tasksLimitPerPage", $tasksLimitPerPage, PDO::PARAM_INT);
-            $getTaskQuery->bindParam(":offset", $offSet, PDO::PARAM_INT);
+            $getTaskQuery->bindParam(":ofset", $offSet, PDO::PARAM_INT);
             $getTaskQuery->execute();
 
             $rowCount = $getTaskQuery->rowCount();
@@ -406,8 +572,8 @@ if (array_key_exists("taskid", $_GET)) {
 
             $task = new Task(null
                 , $jsonData->title
-                , isset($jsonData->description) ? $jsonData->description : null
-                , isset($jsonData->deadline) ? $jsonData->deadline : null
+                , $jsonData->description ?? null
+                , $jsonData->deadline ?? null
                 , $jsonData->completed);
 
             $title = $task->getTitle();
@@ -417,10 +583,10 @@ if (array_key_exists("taskid", $_GET)) {
 
             $insertQuery = $writeDb->prepare('INSERT INTO table_tasks(title,description,deadline,completed) 
                     VALUES (:title, :description, STR_TO_DATE(:deadline,\'%d/%m/%Y %H:%i\'),:completed)');
-            $insertQuery->bindParam(":title", $title, PDO::PARAM_STR);
-            $insertQuery->bindParam(":description", $description, PDO::PARAM_STR);
-            $insertQuery->bindParam(":deadline", $deadline, PDO::PARAM_STR);
-            $insertQuery->bindParam(":completed", $completed, PDO::PARAM_STR);
+            $insertQuery->bindParam(":title", $title);
+            $insertQuery->bindParam(":description", $description);
+            $insertQuery->bindParam(":deadline", $deadline);
+            $insertQuery->bindParam(":completed", $completed);
             $insertQuery->execute();
 
             $rowCount = $insertQuery->rowCount();
