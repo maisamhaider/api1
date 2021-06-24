@@ -4,8 +4,8 @@ require_once("../model/Response.php");
 require_once("../model/Task.php");
 
 try {
-    $writeDb = DB::ConnectWriteDb();
-    $readDb = DB::ConnectReadDb();
+    $writeDb = DB::connectWriteDb();
+    $readDb = DB::connectReadDb();
 
 } catch (PDOException $ex) {
     error_log("Connection error" . $ex, 0);

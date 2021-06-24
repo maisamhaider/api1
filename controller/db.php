@@ -11,7 +11,7 @@ class DB
     private static $dbName = 'tasksdb';
 
     // write from this
-    public static function ConnectWriteDb(): PDO
+    public static function connectWriteDb(): PDO
     {
 
         if (self::$writeDBConnection === null) {
@@ -26,7 +26,7 @@ class DB
     }
 
 //    read from this
-    public static function ConnectReadDb(): PDO
+    public static function connectReadDb(): PDO
     {
         if (self::$readDBConnection === null) {
             self::$readDBConnection = new PDO('mysql:host=localhost;dbname=tasksdb;charset=utf8',
