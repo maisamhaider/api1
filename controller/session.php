@@ -1,6 +1,25 @@
 <?php
+
+use JetBrains\PhpStorm\NoReturn;
+
 require_once('db.php');
 require_once('../model/Response.php');
+
+#[NoReturn] function responseFun($httpStatusCode, $success, $message = null, $toCache = false, $data = null)
+{
+    $response = new Response();
+    $response->setHttpStatusCode($httpStatusCode);
+    $response->setSuccess($success);
+    if ($message !== null) {
+        $response->setMessages($message);
+    }
+    $response->setToCache($toCache);
+    if ($data !== null) {
+        $response->setData($data);
+    }
+    $response->send();
+    exit();
+}
 
 try {
 
@@ -8,12 +27,8 @@ try {
 
 } catch (PDOException $ex) {
     error_log("Connection error-" . $ex, 0);
-    $response = new Response();
-    $response->setHttpStatusCode(500);
-    $response->setSuccess(false);
-    $response->setMessages("Database connection error");
-    $response->send();
-    exit();
+    responseFun(500, false, "Database connection error");
+
 }
 if (array_key_exists("sessionid", $_GET)) {
 
@@ -46,10 +61,11 @@ if (array_key_exists("sessionid", $_GET)) {
             $query = $writeDb->prepare('DELETE FROM table_sessions WHERE id = :sessionId 
                              and accesstoken = :accessToken');
             $query->bindParam(':sessionId', $sessionId, PDO::PARAM_INT);
-            $query->bindParam(':accessToken', $accessToken, PDO::PARAM_STR);
+            $query->bindParam(':accessToken', $accessToken);
             $query->execute();
 
             $rowCount = $query->rowCount();
+
             if ($rowCount === 0) {
                 $response = new Response();
                 $response->setHttpStatusCode(400);
@@ -60,6 +76,7 @@ if (array_key_exists("sessionid", $_GET)) {
             }
 
             $returnData = array();
+
             $returnData['session_id'] = $sessionId;
 
             $response = new Response();
@@ -72,7 +89,12 @@ if (array_key_exists("sessionid", $_GET)) {
 
 
         } catch (PDOException $ex) {
-
+            $response = new Response();
+            $response->setHttpStatusCode(500);
+            $response->setSuccess(false);
+            $response->setMessages("Failed to logout of this session using provided access token");
+            $response->send();
+            exit();
         }
 
 
@@ -162,7 +184,7 @@ if (array_key_exists("sessionid", $_GET)) {
                 $response = new Response();
                 $response->setHttpStatusCode(401);
                 $response->setSuccess(false);
-                $response->setMessages("Refresh token is expired");
+                $response->setMessages("Refresh token is expired: please login again");
                 $response->send();
                 exit();
             }
@@ -188,12 +210,8 @@ if (array_key_exists("sessionid", $_GET)) {
 
             $rowCount = $query->rowCount();
             if ($rowCount === 0) {
-                $response = new Response();
-                $response->setHttpStatusCode(401);
-                $response->setSuccess(false);
-                $response->setMessages("Refresh token couldn't updated - please try again later");
-                $response->send();
-                exit();
+                responseFun(401, false, "Refresh token couldn't updated - please try again later");
+
             }
 
             $returnData = array();
@@ -203,33 +221,16 @@ if (array_key_exists("sessionid", $_GET)) {
             $returnData['refresh_token'] = $refreshToken;
             $returnData['refresh_token_expiry'] = $refreshTokenExpirySec;
 
-            $response = new Response();
-            $response->setHttpStatusCode(200);
-            $response->setSuccess(true);
-            $response->setMessages("Token updated");
-            $response->setData($returnData);
-            $response->send();
-            exit();
-
+            responseFun(200, true, "Token updated", false, $returnData);
 
         } catch
         (PDOException $ex) {
-            $response = new Response();
-            $response->setHttpStatusCode(500);
-            $response->setSuccess(false);
-            $response->setMessages("There was an issue refreshing token - please try again later ");
-            $response->send();
-            exit();
+            responseFun(500, false, "There was an issue refreshing token - please try again later ");
         }
 
 
     } else {
-        $response = new Response();
-        $response->setHttpStatusCode(405);
-        $response->setSuccess(false);
-        $response->setMessages("Request method not allowed");
-        $response->send();
-        exit();
+        responseFun(405, false, "Request method not allowed");
     }
 
 } elseif

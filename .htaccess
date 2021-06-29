@@ -15,3 +15,10 @@ RewriteRule ^users$ controller/user.php [L]
 RewriteRule ^sessions$ controller/session.php [L]
 RewriteRule ^sessions/([0-9]+)$ controller/session.php?sessionid=$1 [L]
 
+#access to image's attributes
+RewriteRule ^tasks/([0-9]+)/images/([0-9]+)/attributes$  controller/images.php?taskid=$1&imageid=$2&attributes=true [L]
+#access to image
+RewriteRule ^tasks/([0-9]+)/images/([0-9]+)$  controller/images.php?taskid=$1&imageid=$2 [L]
+#to post image
+RewriteRule ^tasks/([0-9]+)/images$  controller/images.php?taskid=$1 [L]
+
